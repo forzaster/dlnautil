@@ -1,27 +1,34 @@
 import argparse
+from enum import Enum
+import logging
 import re
 import requests
-from typing import List
+from typing import List, Tuple
 
 import pandas as pd
 from xml.etree import ElementTree
 
+#logging.basicConfig(level=logging.INFO)
+_logger = logging.getLogger('dlnautil')
 
-_DEBUG_LOG = False
+
+class ClassType(Enum):
+    CONTAINER = 'container'
+    ITEM = 'item'
 
 
 def _parse_item(item_str: str) -> dict:
     item = {}
-    if _DEBUG_LOG:
-        print(item_str)
-    attrs = ['id', 'parentID', 'childCount', 'protocolInfo', 'resolution']
+    _logger.debug(item_str)
+    attrs = ['id', 'parentID', 'childCount', 'protocolInfo', 'resolution', 'duration', 'size']
     for a in attrs:
         m = re.search(f'{a}=\"([^\s]+)\"', item_str)
         if m:
             v = m.group().replace(f'{a}=\"', '').replace(f'\"', '')
             item[a] = v
 
-    attrs = ['dc\:title', 'upnp\:class']
+    attrs = ['dc\:title', 'dc\:date', 'upnp\:class','upnp\:album',
+             'pv\:extension', 'pv\:modificationTime', 'pv\:addedTime', 'pv\:lastUpdated']
     for a in attrs:
         m = re.search(f'<{a}>([^\s]+)</{a}>', item_str)
         if m:
@@ -34,43 +41,59 @@ def _parse_item(item_str: str) -> dict:
         v = m.group(1).replace(f'<{a_}>', '').replace(f'</{a_}>', '')
         item['res'] = v
 
-    if _DEBUG_LOG:
-        print(f'{item_str} : {item}')
+    _logger.debug(f'{item_str} : {item}')
     return item
 
 
-def _parse_xml(node: ElementTree, level: int = 0) -> List:
+def _extract_items(c: ElementTree, class_type: ClassType) -> List:
+    ret = []
+    ct = class_type.value
+    for m in re.finditer(f'<{ct} .*</{ct}>', c.text):
+        items = m.group().split(f'</{ct}>')
+        for i in items:
+            item = _parse_item(i)
+            if item:
+                ret.append(item)
+    return ret
+
+
+def _parse_xml_recursive(node: ElementTree, level: int = 0) -> Tuple[List, int, int]:
     level = level+1
     ret = []
+    returned = 0
+    total = 0
     for c in node:
         # print(f'{level} *** {c.tag} : {c.attrib} : {c.text}')
-        ret = _parse_xml(c, level)
+        results, returned_, total_ = _parse_xml_recursive(c, level)
+        ret.extend(results)
+
         if 'Result' == c.tag:
-            print('Result------')
-            for m in re.finditer('<container .*</container>', c.text):
-                containers = m.group().split('</container>')
-                for ct in containers:
-                    item = _parse_item(ct)
-                    if item:
-                        ret.append(item)
-            for m in re.finditer('<item .*</item>', c.text):
-                containers = m.group().split('</item>')
-                for ct in containers:
-                    item = _parse_item(ct)
-                    if item:
-                        ret.append(item)
-        if ret:
-            return ret
-    return ret
+            _logger.debug('Result------')
+            ret.extend(_extract_items(c, ClassType.CONTAINER))
+            ret.extend(_extract_items(c, ClassType.ITEM))
+        elif 'NumberReturned' == c.tag:
+            _logger.info(f'returned count = {c.text}')
+            returned = int(c.text)
+        elif 'TotalMatches' == c.tag:
+            _logger.info(f'total count = {c.text}')
+            total = int(c.text)
+
+        if returned_ > 0 or total_ > 0:
+            returned = returned_
+            total = total_
+
+    # print(f'level={level}: {returned}, {total}')
+
+    return ret, returned, total
 
 
-def _parse(s: str) -> List:
+def _parse(s: str) -> Tuple[List, int, int]:
     et = ElementTree.fromstring(s)
-    ret = _parse_xml(et)
-    return ret
+    ret, returned, total = _parse_xml_recursive(et)
+    return ret, returned, total
 
 
-def _request_dlna(url: str, st: str, item_id: str = '0') -> List:
+def _request_dlna_one(url: str, st: str, item_id: str = '0', start_index: int = 0) -> Tuple[List, int, int]:
     headers = {'Content-Type': "text/xml; charset=utf-8", 'SOAPACTION': f'{st}#Browse'}
     # print(headers)
     data = f"""\
@@ -81,7 +104,7 @@ def _request_dlna(url: str, st: str, item_id: str = '0') -> List:
               <ObjectID>{item_id}</ObjectID>
               <BrowseFlag>BrowseDirectChildren</BrowseFlag>
               <Filter>*</Filter>
-              <StartingIndex>0</StartingIndex>
+              <StartingIndex>{start_index}</StartingIndex>
               <RequestedCount>0</RequestedCount>
               <SortCriteria></SortCriteria>
             </u:Browse>
@@ -97,11 +120,29 @@ def _request_dlna(url: str, st: str, item_id: str = '0') -> List:
     if ret.status_code == 200:
         result = ret.text
         # print(ret.text)
-        items = _parse(result)
+        items, returned, total = _parse(result)
     else:
-        print(f'error{ret.status_code}')
+        _logger.error(f'error{ret.status_code}')
 
-    return items
+    return items, returned, total
+
+
+def _request_dlna(url: str, st: str, item_id: str = '0') -> List:
+    results, returned, total = _request_dlna_one(url, st, item_id, start_index=0)
+
+    if returned < total:
+        start_index = returned
+        while start_index < total:
+            tmp, returned, total = _request_dlna_one(url, st, item_id, start_index=start_index)
+            results.extend(tmp)
+            _logger.info(f'requested : {start_index} ~ {start_index + returned - 1} / {total}')
+            if returned == 0:
+                break
+            start_index += returned
+
+    if len(results) < total:
+        _logger.error(f'Can not get all items. {len(results)} / {total}')
+    return results
 
 
 def _get_items_recursive(url: str, st: str, items: List) -> List:
@@ -112,12 +153,12 @@ def _get_items_recursive(url: str, st: str, items: List) -> List:
             results.extend(_get_items_recursive(url, st, results))
             ret.extend(results)
 
-    print(f'*** {len(ret)}')
+    _logger.debug(f'*** {len(ret)}')
     return ret
 
 
-def browse(url: str, st: str, item_id: str = '0', recursive: str = None, output_filename: str = None):
-    print(f'request {item_id}')
+def browse(url: str, st: str, item_id: str = '0', recursive: str = None, output_filename: str = None) -> List:
+    _logger.info(f'request item_id={item_id}')
 
     root_items = _request_dlna(url, st, item_id)
     items = root_items
@@ -125,28 +166,15 @@ def browse(url: str, st: str, item_id: str = '0', recursive: str = None, output_
     if recursive == 'true':
         items.extend(_get_items_recursive(url, st, root_items))
 
-    # dump only 10 items
-    print(f'### results = {len(items)}')
-    for item in items[:5]:
-        # print(item)
-        print('---')
-        for k, v in item.items():
-            print(f'{k} : {v}')
-    print('....')
-    for item in items[-5:]:
-        # print(item)
-        print('---')
-        for k, v in item.items():
-            print(f'{k} : {v}')
-
     if output_filename:
         output_filename = output_filename if output_filename.endswith('.csv') else f'{output_filename}.csv'
         df = pd.DataFrame(items)
         df.to_csv(f'{output_filename}.csv', index=False)
-        print(f'output to {output_filename}')
+        _logger.info(f'output to {output_filename}')
+    return items
 
 
-if __name__ == '__main__':
+def main():
     p = argparse.ArgumentParser()
     p.add_argument('url', help='url')
     p.add_argument('st', help='st')
@@ -154,4 +182,24 @@ if __name__ == '__main__':
     p.add_argument('--recursive', help='recursive or not (true or false)')
     p.add_argument('--output', help='output file name(csv)')
     args = p.parse_args()
-    browse(args.url, args.st, args.id, args.recursive, args.output)
+    _items = browse(args.url, args.st, args.id, args.recursive, args.output)
+
+    # dump only 10 items
+    print(f'##### results = {len(_items)}')
+    for item in _items[:5]:
+        # print(item)
+        _logger.info('---')
+        for k, v in item.items():
+            _logger.info(f'{k} : {v}')
+    '''
+    print('....')
+    for item in items[-5:]:
+        # print(item)
+        print('---')
+        for k, v in item.items():
+            print(f'{k} : {v}')
+    '''
+
+
+if __name__ == '__main__':
+    main()

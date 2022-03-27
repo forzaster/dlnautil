@@ -1,4 +1,5 @@
 from io import StringIO
+import logging
 import socket
 import time
 from typing import List, Optional
@@ -7,6 +8,8 @@ import requests
 from urllib.parse import urlparse
 from xml.etree import ElementTree
 
+_logger = logging.getLogger('dlnautil')
+
 _MSEARCH_QUERY = """\
 M-SEARCH * HTTP/1.1\r\n
 HOST: 239.255.255.250:1900\r\n
@@ -14,7 +17,6 @@ MAN: "ssdp:discover"\r\n
 MX: 1\r\n
 ST: ssdp:all\r\n
 """
-_DEBUG_LOG = False
 
 
 def _parse_server(s: str) -> dict:
@@ -42,18 +44,17 @@ def get_servers() -> List:
         try:
             res, from_ = sock.recvfrom(4096)
             if res:
-                if _DEBUG_LOG:
-                    print(f'*** from={from_}')
-                    print(res)
-                    print(res.decode())
+                _logger.debug(f'*** from={from_}')
+                _logger.debug(res)
+                _logger.debug(res.decode())
                 recvs.append(res.decode())
         except socket.timeout:
-            print('Fin')
+            _logger.debug('Fin')
             break
 
         duration = time.time()-now
         if duration > 10:
-            print('timeout')
+            _logger.debug('timeout')
             break
         if not res:
             time.sleep(1)
@@ -67,16 +68,15 @@ def get_servers() -> List:
             continue
 
         if 'ContentDirectory' in item.get('ST', ''):
-            print('***** CD')
+            _logger.debug('***** found ContentDirectory')
         else:
             continue
 
         results.append(item)
         results_set.add(item.get('USN', ''))
 
-        if _DEBUG_LOG:
-            for k, v in item.items():
-                print(f'{k} : {v}')
+        for k, v in item.items():
+            _logger.debug(f'{k} : {v}')
 
     sock.close()
     return results
@@ -117,22 +117,21 @@ def _build_url(location: str, xml_item: dict) -> dict:
 
 def _get_server_info(server: dict) -> Optional[dict]:
     if 'ST' not in server or 'LOCATION' not in server:
-        print('lack of info')
+        _logger.error('lack of info')
         return None
 
     location = server['LOCATION']
     res = requests.get(location)
-    print(res)
+    _logger.debug(res)
     if res and res.status_code == 200:
         result = res.text
         # print(result)
         et = ElementTree.fromstring(result)
         ret = _parse_xml(et)
         if ret:
-            if _DEBUG_LOG:
-                print('===')
-                for k, v in ret.items():
-                    print(f'{k} : {v}')
+            _logger.debug('===')
+            for k, v in ret.items():
+                _logger.debug(f'{k} : {v}')
             ret = _build_url(location, ret)
         return ret
 
@@ -141,12 +140,13 @@ def _get_server_info(server: dict) -> Optional[dict]:
 
 def search():
     servers = get_servers()
-    print('****** Found Servers ********')
+    _logger.debug('****** Found Servers ********')
     for s in servers:
-        print('---')
-        print(s)
-        url = _get_server_info(s)
-        print(url)
+        _logger.debug('---')
+        _logger.debug(s)
+        info = _get_server_info(s)
+        _logger.debug(info)
+        s.update(info)
     return servers
 
 
