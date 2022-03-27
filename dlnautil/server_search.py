@@ -17,7 +17,7 @@ ST: ssdp:all\r\n
 _DEBUG_LOG = False
 
 
-def parse_server(s: str) -> dict:
+def _parse_server(s: str) -> dict:
     results = {}
     f = StringIO(s)
     for l in f.readlines():
@@ -61,7 +61,7 @@ def get_servers() -> List:
     results = []
     results_set = set()
     for s in recvs:
-        item = parse_server(s)
+        item = _parse_server(s)
 
         if item['USN'] in results_set:
             continue
@@ -82,12 +82,12 @@ def get_servers() -> List:
     return results
 
 
-def parse_xml(node: ElementTree) -> dict:
+def _parse_xml(node: ElementTree) -> dict:
     ret = {}
     is_retrieve = False
     for c in node:
         # print(f'{c.tag} : {c.attrib} : {c.text}')
-        child_ret = parse_xml(c)
+        child_ret = _parse_xml(c)
         ret[c.tag] = c.text
         if child_ret:
             ret = child_ret
@@ -103,7 +103,7 @@ def parse_xml(node: ElementTree) -> dict:
         return None
 
 
-def build_url(location: str, xml_item: dict) -> dict:
+def _build_url(location: str, xml_item: dict) -> dict:
     urlinfo = urlparse(location)
     path = ''
     serviceType = ''
@@ -115,7 +115,7 @@ def build_url(location: str, xml_item: dict) -> dict:
     return {'url': f'{urlinfo.scheme}://{urlinfo.netloc}{path}', 'serviceType': serviceType}
 
 
-def get_server_info(server: dict) -> Optional[dict]:
+def _get_server_info(server: dict) -> Optional[dict]:
     if 'ST' not in server or 'LOCATION' not in server:
         print('lack of info')
         return None
@@ -127,27 +127,28 @@ def get_server_info(server: dict) -> Optional[dict]:
         result = res.text
         # print(result)
         et = ElementTree.fromstring(result)
-        ret = parse_xml(et)
+        ret = _parse_xml(et)
         if ret:
             if _DEBUG_LOG:
                 print('===')
                 for k, v in ret.items():
                     print(f'{k} : {v}')
-            ret = build_url(location, ret)
+            ret = _build_url(location, ret)
         return ret
 
     return None
 
 
-def main():
+def search():
     servers = get_servers()
     print('****** Found Servers ********')
     for s in servers:
         print('---')
         print(s)
-        url = get_server_info(s)
+        url = _get_server_info(s)
         print(url)
+    return servers
 
 
 if __name__ == '__main__':
-    main()
+    _ = search()

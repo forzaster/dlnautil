@@ -10,7 +10,7 @@ from xml.etree import ElementTree
 _DEBUG_LOG = False
 
 
-def parse_item(item_str: str) -> dict:
+def _parse_item(item_str: str) -> dict:
     item = {}
     if _DEBUG_LOG:
         print(item_str)
@@ -39,24 +39,24 @@ def parse_item(item_str: str) -> dict:
     return item
 
 
-def parse_xml(node: ElementTree, level: int = 0) -> List:
+def _parse_xml(node: ElementTree, level: int = 0) -> List:
     level = level+1
     ret = []
     for c in node:
         # print(f'{level} *** {c.tag} : {c.attrib} : {c.text}')
-        ret = parse_xml(c, level)
+        ret = _parse_xml(c, level)
         if 'Result' == c.tag:
             print('Result------')
             for m in re.finditer('<container .*</container>', c.text):
                 containers = m.group().split('</container>')
                 for ct in containers:
-                    item = parse_item(ct)
+                    item = _parse_item(ct)
                     if item:
                         ret.append(item)
             for m in re.finditer('<item .*</item>', c.text):
                 containers = m.group().split('</item>')
                 for ct in containers:
-                    item = parse_item(ct)
+                    item = _parse_item(ct)
                     if item:
                         ret.append(item)
         if ret:
@@ -64,13 +64,13 @@ def parse_xml(node: ElementTree, level: int = 0) -> List:
     return ret
 
 
-def parse(s: str) -> List:
+def _parse(s: str) -> List:
     et = ElementTree.fromstring(s)
-    ret = parse_xml(et)
+    ret = _parse_xml(et)
     return ret
 
 
-def request_dlna(url: str, st: str, item_id: str = '0') -> List:
+def _request_dlna(url: str, st: str, item_id: str = '0') -> List:
     headers = {'Content-Type': "text/xml; charset=utf-8", 'SOAPACTION': f'{st}#Browse'}
     # print(headers)
     data = f"""\
@@ -97,33 +97,33 @@ def request_dlna(url: str, st: str, item_id: str = '0') -> List:
     if ret.status_code == 200:
         result = ret.text
         # print(ret.text)
-        items = parse(result)
+        items = _parse(result)
     else:
         print(f'error{ret.status_code}')
 
     return items
 
 
-def get_items_recursive(url: str, st: str, items: List) -> List:
+def _get_items_recursive(url: str, st: str, items: List) -> List:
     ret = []
     for child in items:
         if 'container' in child.get('class', ''):
-            results = request_dlna(url, st, child['id'])
-            results.extend(get_items_recursive(url, st, results))
+            results = _request_dlna(url, st, child['id'])
+            results.extend(_get_items_recursive(url, st, results))
             ret.extend(results)
 
     print(f'*** {len(ret)}')
     return ret
 
 
-def main(url: str, st: str, item_id: str = '0', recursive: str = None, output_filename: str = None):
+def browse(url: str, st: str, item_id: str = '0', recursive: str = None, output_filename: str = None):
     print(f'request {item_id}')
 
-    root_items = request_dlna(url, st, item_id)
+    root_items = _request_dlna(url, st, item_id)
     items = root_items
 
     if recursive == 'true':
-        items.extend(get_items_recursive(url, st, root_items))
+        items.extend(_get_items_recursive(url, st, root_items))
 
     # dump only 10 items
     print(f'### results = {len(items)}')
@@ -154,4 +154,4 @@ if __name__ == '__main__':
     p.add_argument('--recursive', help='recursive or not (true or false)')
     p.add_argument('--output', help='output file name(csv)')
     args = p.parse_args()
-    main(args.url, args.st, args.id, args.recursive, args.output)
+    browse(args.url, args.st, args.id, args.recursive, args.output)
