@@ -1,0 +1,55 @@
+<html>
+<head>
+  <script type="text/javascript">
+    function initVideo() {
+      console.log('test')
+      var param = location.search;
+      p = new URLSearchParams(param).entries()
+      p = [...p]
+      url = ""
+      for (i = 0; i < p.length; i++) {
+        if (p[i][0] == "url") {
+          url = p[i][1]
+        }
+      }
+      console.log("window : " + window.outerWidth + "x" + window.outerHeight)
+      console.log(url)
+      var video = document.getElementById("video");
+      video.src = url;
+      video.addEventListener('loadedmetadata', function() {
+	    console.log("loadedmetadata " + video.videoWidth + "x" + video.videoHeight);
+      });
+      video.addEventListener('loadeddata', function() {
+        console.log("loadeddata " + video.videoWidth + "x" + video.videoHeight);
+
+        w = video.videoWidth;
+        h = video.videoHeight;
+        if (w > h) {
+           w = window.outerWidth;
+           room = parseInt(w * 0.05);
+           room = room < 50 ? room : 50;
+           w = w - room;
+           h = parseInt(w * video.videoHeight / video.videoWidth);
+        } else {
+           h = window.outerHeight;
+           room = parseInt(h * 0.05);
+           room = room < 50 ? room : 50;
+           h = h - room;
+           w = parseInt(h * video.videoWidth / video.videoHeight);
+        }
+        video.style.width = w;
+        video.style.height = h;
+      })
+      video.load();
+    }
+  </script>
+</head>
+<body onload="initVideo()">
+  <div>
+    <video id="video" controls>
+    </video>
+  </div>
+</body>
+
+</html>
+
