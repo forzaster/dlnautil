@@ -1,53 +1,95 @@
 <html>
 <head>
+  <link rel="stylesheet" href="css.css">
   <script type="text/javascript">
     function initVideo() {
+      var play = document.getElementById("play");
+      play.addEventListener('click', function() {
+        console.log("click play");
+        var req = new XMLHttpRequest();
+        req.open("GET", "video_play.php", false);
+        req.send(null);
+        console.log(req.responseText);
+      })
+      var pause = document.getElementById("pause");
+      pause.addEventListener('click', function() {
+        console.log("click pause");
+        var req = new XMLHttpRequest();
+        req.open("GET", "video_pause.php", false);
+        req.send(null);
+        console.log(req.responseText);
+      })
+      var stop = document.getElementById("stop");
+      stop.addEventListener('click', function() {
+        console.log("click stop");
+        var req = new XMLHttpRequest();
+        req.open("GET", "video_stop.php", false);
+        req.send(null);
+        console.log(req.responseText);
+        window.close()
+      })
+
+
       console.log('test')
       var param = location.search;
-      p = new URLSearchParams(param).entries()
-      p = [...p]
-      url = ""
+      p = new URLSearchParams(param).entries();
+      p = [...p];
+      url = "";
+      thumb = "";
+      title = "";
+      duration = "";
       for (i = 0; i < p.length; i++) {
-        if (p[i][0] == "url") {
-          url = p[i][1]
+        key = p[i][0];
+        value = p[i][1];
+        switch (key) {
+          case "url":
+            url = value;
+            break;
+          case "thumb":
+            thumb = value;
+            break;
+          case "title":
+            title = value;
+            break;
+          case "duration":
+            duration = value;
+            break;
         }
       }
-      console.log("window : " + window.outerWidth + "x" + window.outerHeight)
-      console.log(url)
-      var video = document.getElementById("video");
-      video.src = url;
-      video.addEventListener('loadedmetadata', function() {
-	    console.log("loadedmetadata " + video.videoWidth + "x" + video.videoHeight);
-      });
-      video.addEventListener('loadeddata', function() {
-        console.log("loadeddata " + video.videoWidth + "x" + video.videoHeight);
+      console.log('-----')
+      console.log(url);
+      console.log(thumb);
+      console.log(title);
+      console.log(duration);
+      console.log('=====')
 
-        w = video.videoWidth;
-        h = video.videoHeight;
-        if (w > h) {
-           w = window.outerWidth;
-           room = parseInt(w * 0.05);
-           room = room < 50 ? room : 50;
-           w = w - room;
-           h = parseInt(w * video.videoHeight / video.videoWidth);
-        } else {
-           h = window.outerHeight;
-           room = parseInt(h * 0.05);
-           room = room < 50 ? room : 50;
-           h = h - room;
-           w = parseInt(h * video.videoWidth / video.videoHeight);
-        }
-        video.style.width = w;
-        video.style.height = h;
-      })
-      video.load();
+      var img = document.getElementById("thumbnail");
+      img.innerHTML = '<img src="' + thumb + '" class="video_thumbnail"/>'
+      var titledom = document.getElementById("title");
+      titledom.innerHTML = title + " : " + duration
+
+      var req = new XMLHttpRequest();
+      req.open("GET", "video_set_play.php?url=" + url, false);
+      req.send(null);
+      console.log(req.responseText);
     }
   </script>
 </head>
 <body onload="initVideo()">
   <div>
-    <video id="video" controls>
-    </video>
+    <table>
+      <tr>
+        <td colspan="3"><div id="thumbnail"></div></td>
+      </tr>
+      <tr>
+        <td colspan="3"><div id="title"></div></td>
+      </tr>
+      <tr>
+        <td><img id="play" class="video_control" src="icons/play.png"/><br><div align="center">Play</div></td>
+        <td><img id="pause" class="video_control" src="icons/pause.png"/><br><div align="center">Pause</div></td>
+        <td><img id="stop" class="video_control" src="icons/stop.png"/><br><div align="center">Stop</div></td>
+      </tr>
+    </table>
   </div>
 </body>
 
