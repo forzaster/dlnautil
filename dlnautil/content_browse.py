@@ -119,7 +119,7 @@ def _request_dlna_one(url: str, st: str, item_id: str = '0', start_index: int = 
     items = []
     if ret.status_code == 200:
         result = ret.text
-        print(ret.text)
+        # print(ret.text)
         items, returned, total = _parse(result)
     else:
         _logger.error(f'error{ret.status_code}')
