@@ -1,14 +1,14 @@
 import argparse
 from enum import Enum
+import json
 import logging
 import re
 import requests
 from typing import List, Tuple
 
-import pandas as pd
 from xml.etree import ElementTree
 
-#logging.basicConfig(level=logging.INFO)
+# logging.basicConfig(level=logging.INFO)
 _logger = logging.getLogger('dlnautil')
 
 
@@ -119,7 +119,7 @@ def _request_dlna_one(url: str, st: str, item_id: str = '0', start_index: int = 
     items = []
     if ret.status_code == 200:
         result = ret.text
-        # print(ret.text)
+        print(ret.text)
         items, returned, total = _parse(result)
     else:
         _logger.error(f'error{ret.status_code}')
@@ -167,20 +167,21 @@ def browse(url: str, st: str, item_id: str = '0', recursive: str = None, output_
         items.extend(_get_items_recursive(url, st, root_items))
 
     if output_filename:
-        output_filename = output_filename if output_filename.endswith('.csv') else f'{output_filename}.csv'
-        df = pd.DataFrame(items)
-        df.to_csv(f'{output_filename}.csv', index=False)
+        output_filename = output_filename if output_filename.endswith('.json') else f'{output_filename}.json'
+        with open(output_filename, 'w') as f:
+            for item in items:
+                f.write(json.dumps(item))
         _logger.info(f'output to {output_filename}')
     return items
 
 
-def main():
+def _main():
     p = argparse.ArgumentParser()
     p.add_argument('url', help='url')
     p.add_argument('st', help='st')
     p.add_argument('--id', help='item id')
     p.add_argument('--recursive', help='recursive or not (true or false)')
-    p.add_argument('--output', help='output file name(csv)')
+    p.add_argument('--output', help='output file name(json)')
     args = p.parse_args()
     _items = browse(args.url, args.st, args.id, args.recursive, args.output)
 
@@ -202,4 +203,4 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    _main()

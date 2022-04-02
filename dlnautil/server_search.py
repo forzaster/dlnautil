@@ -8,6 +8,7 @@ import requests
 from urllib.parse import urlparse
 from xml.etree import ElementTree
 
+logging.basicConfig(level=logging.DEBUG)
 _logger = logging.getLogger('dlnautil')
 
 _MSEARCH_QUERY = """\
@@ -31,7 +32,7 @@ def _parse_server(s: str) -> dict:
     return results
 
 
-def get_servers() -> List:
+def _get_servers() -> List:
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     sock.setblocking(False)
     sock.settimeout(10)
@@ -139,16 +140,20 @@ def _get_server_info(server: dict) -> Optional[dict]:
 
 
 def search():
-    servers = get_servers()
-    _logger.debug('****** Found Servers ********')
+    return _get_servers()
+
+
+def _main():
+    servers = search()
+    _logger.info('****** Found Servers ********')
     for s in servers:
-        _logger.debug('---')
-        _logger.debug(s)
+        _logger.info('---')
+        _logger.info(s)
         info = _get_server_info(s)
-        _logger.debug(info)
+        _logger.info(info)
         s.update(info)
     return servers
 
 
 if __name__ == '__main__':
-    _ = search()
+    _ = _main()
