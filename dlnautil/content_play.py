@@ -2,25 +2,23 @@ import argparse
 import requests
 import logging
 
-
+logging.basicConfig(level=logging.INFO)
 _logger = logging.getLogger('content_play')
 
 
 def _request(url: str, action: str, data: str):
     headers = {'Content-Type': "text/xml; charset=utf-8",
                'SOAPACTION': f'"urn:schemas-upnp-org:service:AVTransport:1#{action}"'}
-    # print(headers)
-    body = f"""\
-        <?xml version="1.0"?>
-        <s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/" s:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/">
-          <s:Body>
-            <u:{action} xmlns:u="urn:schemas-upnp-org:service:AVTransport:1">
-              {data}
-            </u:{action}>
-          </s:Body>
-        </s:Envelope>
-        """
+    body = f"""<?xml version="1.0"?>
+               <s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/" s:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/">
+                 <s:Body>
+                   <u:{action} xmlns:u="urn:schemas-upnp-org:service:AVTransport:1">
+                   {data}
+                   </u:{action}>
+                 </s:Body>
+               </s:Envelope>"""
     _logger.debug(url)
+    _logger.debug(headers)
     _logger.debug(body)
 
     body = body.encode('utf-8')
@@ -35,36 +33,28 @@ def _request(url: str, action: str, data: str):
 
 def set_content_uri(url: str, item_url: str):
     action = 'SetAVTransportURI'
-    data = f"""\
-              <InstanceID>0</InstanceID>
-              <CurrentURI>{item_url}</CurrentURI>
-              <CurrentURIMetaData></CurrentURIMetaData>
-            """
+    data = f"""<InstanceID>0</InstanceID>
+               <CurrentURI>{item_url}</CurrentURI>
+               <CurrentURIMetaData></CurrentURIMetaData>"""
     _request(url, action, data)
 
 
 def play(url: str):
     action = 'Play'
-    data = f"""\
-              <InstanceID>0</InstanceID>
-              <Speed>1</Speed>
-            """
+    data = f"""<InstanceID>0</InstanceID>
+               <Speed>1</Speed>"""
     _request(url, action, data)
 
 
 def pause(url: str):
     action = 'Pause'
-    data = f"""\
-              <InstanceID>0</InstanceID>
-            """
+    data = '<InstanceID>0</InstanceID>'
     _request(url, action, data)
 
 
 def stop(url: str):
-    action = 'Pause'
-    data = f"""\
-              <InstanceID>0</InstanceID>
-            """
+    action = 'Stop'
+    data = '<InstanceID>0</InstanceID>'
     _request(url, action, data)
 
 
@@ -84,3 +74,7 @@ def _main():
         stop(args.url)
     else:
         _logger.error(f'Error : {args.action} not found')
+
+
+if __name__ == '__main__':
+    _main()
