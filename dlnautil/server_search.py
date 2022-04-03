@@ -8,7 +8,7 @@ import requests
 from urllib.parse import urlparse
 from xml.etree import ElementTree
 
-logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(level=logging.INFO)
 _logger = logging.getLogger('dlnautil')
 
 _MSEARCH_QUERY = """\
@@ -104,16 +104,22 @@ def _parse_xml(node: ElementTree) -> dict:
         return None
 
 
-def _build_url(location: str, xml_item: dict) -> dict:
+def _build_control_url(location: str, xml_item: dict) -> dict:
     urlinfo = urlparse(location)
-    path = ''
-    serviceType = ''
+
+    parse_key = ['controlURL', 'serviceType', 'serviceId', 'SCPDURL', 'eventSubURL']
+    ret = {}
     for k in xml_item.keys():
-        if 'controlURL' in k:
-            path = xml_item[k]
-        if 'serviceType' in k:
-            serviceType = xml_item[k]
-    return {'url': f'{urlinfo.scheme}://{urlinfo.netloc}{path}', 'serviceType': serviceType}
+        for pk in parse_key:
+            if pk in k:
+                ret[pk] = xml_item[k]
+                break
+
+    path = ret['controlURL']
+    if path:
+        ret['url'] = f'{urlinfo.scheme}://{urlinfo.netloc}{path}'
+        del ret['controlURL']
+    return ret
 
 
 def _get_server_info(server: dict) -> Optional[dict]:
@@ -133,27 +139,29 @@ def _get_server_info(server: dict) -> Optional[dict]:
             _logger.debug('===')
             for k, v in ret.items():
                 _logger.debug(f'{k} : {v}')
-            ret = _build_url(location, ret)
+            ret = _build_control_url(location, ret)
         return ret
 
     return None
 
 
 def search():
-    return _get_servers()
+    servers = _get_servers()
+    server_infos = []
+    for s in servers:
+        info = _get_server_info(s)
+        server_infos.append(info)
+        s.update(info)
+    return server_infos
 
 
 def _main():
-    servers = search()
+    server_infos = search()
     _logger.info('****** Found Servers ********')
-    for s in servers:
+    for s in server_infos:
         _logger.info('---')
         _logger.info(s)
-        info = _get_server_info(s)
-        _logger.info(info)
-        s.update(info)
-    return servers
 
 
 if __name__ == '__main__':
-    _ = _main()
+    _main()

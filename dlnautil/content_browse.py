@@ -8,7 +8,7 @@ from typing import List, Tuple
 
 from xml.etree import ElementTree
 
-# logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.INFO)
 _logger = logging.getLogger('dlnautil')
 
 
@@ -72,10 +72,10 @@ def _parse_xml_recursive(node: ElementTree, level: int = 0) -> Tuple[List, int, 
             ret.extend(_extract_items(c, ClassType.CONTAINER))
             ret.extend(_extract_items(c, ClassType.ITEM))
         elif 'NumberReturned' == c.tag:
-            _logger.info(f'returned count = {c.text}')
+            _logger.debug(f'returned count = {c.text}')
             returned = int(c.text)
         elif 'TotalMatches' == c.tag:
-            _logger.info(f'total count = {c.text}')
+            _logger.debug(f'total count = {c.text}')
             total = int(c.text)
 
         if returned_ > 0 or total_ > 0:
@@ -135,7 +135,7 @@ def _request_dlna(url: str, st: str, item_id: str = '0') -> List:
         while start_index < total:
             tmp, returned, total = _request_dlna_one(url, st, item_id, start_index=start_index)
             results.extend(tmp)
-            _logger.info(f'requested : {start_index} ~ {start_index + returned - 1} / {total}')
+            _logger.debug(f'requested : {start_index} ~ {start_index + returned - 1} / {total}')
             if returned == 0:
                 break
             start_index += returned
@@ -158,7 +158,7 @@ def _get_items_recursive(url: str, st: str, items: List) -> List:
 
 
 def browse(url: str, st: str, item_id: str = '0', recursive: str = None, output_filename: str = None) -> List:
-    _logger.info(f'request item_id={item_id}')
+    _logger.debug(f'request item_id={item_id}')
 
     root_items = _request_dlna(url, st, item_id)
     items = root_items
