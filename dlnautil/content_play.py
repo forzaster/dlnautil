@@ -77,6 +77,11 @@ def _request(url: str, action: str, data: str):
 
 
 def get_rendererinfo(url: str):
+    """Get renderer information.
+
+    :param url: renderer URL for description
+    :return: list of renderer various control URLs
+    """
     headers = {'Content-Type': "text/xml; charset=utf-8"}
     ret = requests.get(url, headers=headers)
 
@@ -92,6 +97,12 @@ def get_rendererinfo(url: str):
 
 
 def set_content_uri(url: str, item_url: str):
+    """Set content URL to play.
+
+    :param url: Renderer SetAVTransport control URL
+    :param item_url: content URL
+    :return:
+    """
     action = 'SetAVTransportURI'
     data = f"""<InstanceID>0</InstanceID>
                <CurrentURI>{item_url}</CurrentURI>
@@ -100,6 +111,11 @@ def set_content_uri(url: str, item_url: str):
 
 
 def play(url: str):
+    """Play (set_content_uri should be called before play)
+
+    :param url: Renderer SetAVTransport control URL
+    :return:
+    """
     action = 'Play'
     data = f"""<InstanceID>0</InstanceID>
                <Speed>1</Speed>"""
@@ -107,12 +123,22 @@ def play(url: str):
 
 
 def pause(url: str):
+    """Pause
+
+    :param url:
+    :return:
+    """
     action = 'Pause'
     data = '<InstanceID>0</InstanceID>'
     _request(url, action, data)
 
 
 def stop(url: str):
+    """Stop
+
+    :param url:
+    :return:
+    """
     action = 'Stop'
     data = '<InstanceID>0</InstanceID>'
     _request(url, action, data)

@@ -158,6 +158,15 @@ def _get_items_recursive(url: str, st: str, items: List) -> List:
 
 
 def browse(url: str, st: str, item_id: str = '0', recursive: str = None, output_filename: str = None) -> List:
+    """Browse contents in DLNA ContentDirectory server
+
+    :param url: control URL of DLNA ContentDirectory server
+    :param st: service type
+    :param item_id: item_id of DLNA ContentDirectory server
+    :param recursive: whether search contents recursively if item is container
+    :param output_filename: json output filename if want to output resuts to file
+    :return: list of contents
+    """
     _logger.debug(f'request item_id={item_id}')
 
     root_items = _request_dlna(url, st, item_id)

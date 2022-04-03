@@ -146,6 +146,10 @@ def _get_server_info(server: dict) -> Optional[dict]:
 
 
 def search():
+    """Search DLNA ContentDirectory server information
+
+    :return: list of ContentDirectory server information
+    """
     servers = _get_servers()
     server_infos = []
     for s in servers:
