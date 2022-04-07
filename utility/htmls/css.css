@@ -76,6 +76,10 @@ body {
   right: 0;
 }
 
+.video_player {
+  table-layout: fixed;
+}
+
 .video_control {
   margin: 10px;
 }

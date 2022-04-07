@@ -63,7 +63,7 @@
       console.log('=====')
 
       var img = document.getElementById("thumbnail");
-      img.innerHTML = '<img src="' + thumb + '" class="video_thumbnail"/>'
+      img.innerHTML = '<img src="' + thumb + '" class="video_thumbnail" width="100%"/>'
       var titledom = document.getElementById("title");
       titledom.innerHTML = title + " : " + duration
 
@@ -76,7 +76,7 @@
 </head>
 <body onload="initVideo()">
   <div>
-    <table>
+    <table width="90%" class="video_player">
       <tr>
         <td colspan="3"><div id="thumbnail"></div></td>
       </tr>
@@ -84,9 +84,9 @@
         <td colspan="3"><div id="title"></div></td>
       </tr>
       <tr>
-        <td><img id="play" class="video_control" src="icons/play.png"/><br><div align="center">Play</div></td>
-        <td><img id="pause" class="video_control" src="icons/pause.png"/><br><div align="center">Pause</div></td>
-        <td><img id="stop" class="video_control" src="icons/stop.png"/><br><div align="center">Stop</div></td>
+        <td><div align="center"><img id="play" class="video_control" src="icons/play.png"/></div><br><div align="center">Play</div></td>
+        <td><div align="center"><img id="pause" class="video_control" src="icons/pause.png"/></div><br><div align="center">Pause</div></td>
+        <td><div align="center"><img id="stop" class="video_control" src="icons/stop.png"/></div><br><div align="center">Stop</div></td>
       </tr>
     </table>
   </div>
