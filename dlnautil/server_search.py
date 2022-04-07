@@ -20,6 +20,101 @@ ST: ssdp:all\r\n
 """
 
 
+class Server:
+    def __init__(self, info: dict):
+        self.info = info
+        self.detail = None
+
+    def _parse_xml(self, node: ElementTree) -> dict:
+        ret = {}
+        is_retrieve = False
+        for c in node:
+            # print(f'{c.tag} : {c.attrib} : {c.text}')
+            child_ret = self._parse_xml(c)
+            ret[c.tag] = c.text
+            if child_ret:
+                ret = child_ret
+                is_retrieve = True
+                break
+
+            if c.text and 'ContentDirectory' in c.text:
+                is_retrieve = True
+
+        if is_retrieve:
+            return ret
+        else:
+            return None
+
+    def _build_control_url(self, location: str, xml_item: dict) -> dict:
+        parse_key = ['controlURL', 'serviceType', 'serviceId', 'SCPDURL', 'eventSubURL']
+        ret = {}
+        for k in xml_item.keys():
+            for pk in parse_key:
+                if pk in k:
+                    ret[pk] = xml_item[k]
+                    break
+
+        path = ret['controlURL']
+        if path:
+            urlinfo = urlparse(location)
+            ret['url'] = f'{urlinfo.scheme}://{urlinfo.netloc}{path}'
+            del ret['controlURL']
+        return ret
+
+    def fetch_detail(self):
+        location = self.info.get('LOCATION')
+        stype = self.info.get('ST')
+        if not location or not stype:
+            _logger.error('lack of info')
+            return
+
+        res = requests.get(location)
+        _logger.debug(res)
+        if res and res.status_code == 200:
+            result = res.text
+            # print(result)
+            et = ElementTree.fromstring(result)
+            ret = self._parse_xml(et)
+            if ret:
+                self.detail = self._build_control_url(location, ret)
+
+    def uniqueid(self):
+        return self.info.get('USN')
+
+    def get_info(self):
+        return self.info.copy()
+
+    def get_detail(self):
+        return self.detail.copy()
+
+    def dump_info(self, is_debug=True):
+        logger_func = _logger.debug if is_debug else _logger.info
+        for k, v in self.info.items():
+            logger_func(f'{k} : {v}')
+
+    def dump_detail(self, is_debug=True):
+        logger_func = _logger.debug if is_debug else _logger.info
+        for k, v in self.detail.items():
+            logger_func(f'{k} : {v}')
+
+    def __eq__(self, other):
+        if isinstance(other, Server):
+            return self.uniqueid() == other.uniqueid()
+        return False
+
+    def __str__(self):
+        ret = '--- info ---\n'
+        for k, v in self.info.items():
+            ret += f'{k} : {v}\n'
+        ret += '--- detail ---\n'
+        for k, v in self.detail.items():
+            ret += f'{k} : {v}\n'
+        return ret
+
+    def __hash__(self):
+        return hash(self.uniqueid())
+
+
 def _parse_server(s: str) -> dict:
     results = {}
     f = StringIO(s)
@@ -60,7 +155,6 @@ def _get_servers() -> List:
         if not res:
             time.sleep(1)
 
-    results = []
     results_set = set()
     for s in recvs:
         item = _parse_server(s)
@@ -68,95 +162,26 @@ def _get_servers() -> List:
         if item['USN'] in results_set:
             continue
 
-        if 'ContentDirectory' in item.get('ST', ''):
-            _logger.debug('***** found ContentDirectory')
-        else:
+        if 'ContentDirectory' not in item.get('ST', ''):
             continue
 
-        results.append(item)
-        results_set.add(item.get('USN', ''))
+        _logger.debug('***** found ContentDirectory')
 
-        for k, v in item.items():
-            _logger.debug(f'{k} : {v}')
+        server = Server(item)
+        server.fetch_detail()
+        server.dump_info()
+        results_set.add(server)
 
     sock.close()
-    return results
+    return list(results_set)
 
 
-def _parse_xml(node: ElementTree) -> dict:
-    ret = {}
-    is_retrieve = False
-    for c in node:
-        # print(f'{c.tag} : {c.attrib} : {c.text}')
-        child_ret = _parse_xml(c)
-        ret[c.tag] = c.text
-        if child_ret:
-            ret = child_ret
-            is_retrieve = True
-            break
-
-        if c.text and 'ContentDirectory' in c.text:
-            is_retrieve = True
-
-    if is_retrieve:
-        return ret
-    else:
-        return None
-
-
-def _build_control_url(location: str, xml_item: dict) -> dict:
-    urlinfo = urlparse(location)
-
-    parse_key = ['controlURL', 'serviceType', 'serviceId', 'SCPDURL', 'eventSubURL']
-    ret = {}
-    for k in xml_item.keys():
-        for pk in parse_key:
-            if pk in k:
-                ret[pk] = xml_item[k]
-                break
-
-    path = ret['controlURL']
-    if path:
-        ret['url'] = f'{urlinfo.scheme}://{urlinfo.netloc}{path}'
-        del ret['controlURL']
-    return ret
-
-
-def _get_server_info(server: dict) -> Optional[dict]:
-    if 'ST' not in server or 'LOCATION' not in server:
-        _logger.error('lack of info')
-        return None
-
-    location = server['LOCATION']
-    res = requests.get(location)
-    _logger.debug(res)
-    if res and res.status_code == 200:
-        result = res.text
-        # print(result)
-        et = ElementTree.fromstring(result)
-        ret = _parse_xml(et)
-        if ret:
-            _logger.debug('===')
-            for k, v in ret.items():
-                _logger.debug(f'{k} : {v}')
-            ret = _build_control_url(location, ret)
-        return ret
-
-    return None
-
-
-def search():
+def search() -> List[Server]:
     """Search DLNA ContentDirectory server information
 
     :return: list of ContentDirectory server information
     """
-    servers = _get_servers()
-    server_infos = []
-    for s in servers:
-        info = _get_server_info(s)
-        server_infos.append(info)
-        s.update(info)
-    return server_infos
+    return _get_servers()
 
 
 def _main():
