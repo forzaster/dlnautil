@@ -16,45 +16,50 @@ class ClassType(Enum):
     CONTAINER = 'container'
     ITEM = 'item'
 
+    def extract(self, c: ElementTree):
+        ret = []
+        ct = self.value
+        for m in re.finditer(f'<{ct} .*</{ct}>', c.text):
+            items = m.group().split(f'</{ct}>')
+            for i in items:
+                item = Item(i, self.value)
+                if item:
+                    ret.append(item)
+        return ret
 
-def _parse_item(item_str: str) -> dict:
-    item = {}
-    _logger.debug(item_str)
-    attrs = ['id', 'parentID', 'childCount', 'protocolInfo', 'resolution', 'duration', 'size']
-    for a in attrs:
-        m = re.search(f'{a}=\"([^\s]+)\"', item_str)
+
+class Item:
+
+    def __init__(self, item_str: str, ctype: str):
+        item = {}
+        _logger.debug(item_str)
+        attrs = ['id', 'parentID', 'childCount', 'protocolInfo', 'resolution', 'duration', 'size']
+        for a in attrs:
+            m = re.search(f'{a}=\"([^\s]+)\"', item_str)
+            if m:
+                v = m.group().replace(f'{a}=\"', '').replace(f'\"', '')
+                item[a] = v
+
+        attrs = ['dc\:title', 'dc\:date', 'upnp\:class','upnp\:album',
+                 'pv\:extension', 'pv\:modificationTime', 'pv\:addedTime', 'pv\:lastUpdated']
+        for a in attrs:
+            m = re.search(f'<{a}>([^\s]+)</{a}>', item_str)
+            if m:
+                a_ = a.replace('\\', '')
+                v = m.group().replace(f'<{a_}>', '').replace(f'</{a_}>', '')
+                item[a.split(':')[-1]] = v
+
+        m = re.search(f'<res .*>([^\s]+)</res>', item_str)
         if m:
-            v = m.group().replace(f'{a}=\"', '').replace(f'\"', '')
-            item[a] = v
+            v = m.group(1).replace(f'<{a_}>', '').replace(f'</{a_}>', '')
+            item['res'] = v
 
-    attrs = ['dc\:title', 'dc\:date', 'upnp\:class','upnp\:album',
-             'pv\:extension', 'pv\:modificationTime', 'pv\:addedTime', 'pv\:lastUpdated']
-    for a in attrs:
-        m = re.search(f'<{a}>([^\s]+)</{a}>', item_str)
-        if m:
-            a_ = a.replace('\\', '')
-            v = m.group().replace(f'<{a_}>', '').replace(f'</{a_}>', '')
-            item[a.split(':')[-1]] = v
+        _logger.debug(f'{item_str} : {item}')
+        self.item = item
+        self.class_type = ctype
 
-    m = re.search(f'<res .*>([^\s]+)</res>', item_str)
-    if m:
-        v = m.group(1).replace(f'<{a_}>', '').replace(f'</{a_}>', '')
-        item['res'] = v
-
-    _logger.debug(f'{item_str} : {item}')
-    return item
-
-
-def _extract_items(c: ElementTree, class_type: ClassType) -> List:
-    ret = []
-    ct = class_type.value
-    for m in re.finditer(f'<{ct} .*</{ct}>', c.text):
-        items = m.group().split(f'</{ct}>')
-        for i in items:
-            item = _parse_item(i)
-            if item:
-                ret.append(item)
-    return ret
+    def get_data(self):
+        return self.item
 
 
 def _parse_xml_recursive(node: ElementTree, level: int = 0) -> Tuple[List, int, int]:
@@ -69,8 +74,8 @@ def _parse_xml_recursive(node: ElementTree, level: int = 0) -> Tuple[List, int, 
 
         if 'Result' == c.tag:
             _logger.debug('Result------')
-            ret.extend(_extract_items(c, ClassType.CONTAINER))
-            ret.extend(_extract_items(c, ClassType.ITEM))
+            ret.extend(ClassType.CONTAINER.extract(c))
+            ret.extend(ClassType.ITEM.extract(c))
         elif 'NumberReturned' == c.tag:
             _logger.debug(f'returned count = {c.text}')
             returned = int(c.text)
@@ -95,6 +100,7 @@ def _parse(s: str) -> Tuple[List, int, int]:
 
 def _request_dlna_one(url: str, st: str, item_id: str = '0', start_index: int = 0) -> Tuple[List, int, int]:
     headers = {'Content-Type': "text/xml; charset=utf-8", 'SOAPACTION': f'{st}#Browse'}
+
     # print(headers)
     data = f"""\
         <?xml version="1.0"?>
@@ -148,8 +154,9 @@ def _request_dlna(url: str, st: str, item_id: str = '0') -> List:
 def _get_items_recursive(url: str, st: str, items: List) -> List:
     ret = []
     for child in items:
-        if 'container' in child.get('class', ''):
-            results = _request_dlna(url, st, child['id'])
+        item_data = child.get_data()
+        if ClassType.CONTAINER.value in item_data.get('class', ''):
+            results = _request_dlna(url, st, item_data['id'])
             results.extend(_get_items_recursive(url, st, results))
             ret.extend(results)
 
@@ -169,11 +176,10 @@ def browse(url: str, st: str, item_id: str = '0', recursive: str = None, output_
     """
     _logger.debug(f'request item_id={item_id}')
 
-    root_items = _request_dlna(url, st, item_id)
-    items = root_items
+    items = _request_dlna(url, st, item_id)
 
     if recursive == 'true':
-        items.extend(_get_items_recursive(url, st, root_items))
+        items.extend(_get_items_recursive(url, st, items))
 
     if output_filename:
         output_filename = output_filename if output_filename.endswith('.json') else f'{output_filename}.json'
@@ -199,7 +205,7 @@ def _main():
     for item in _items[:5]:
         # print(item)
         _logger.info('---')
-        for k, v in item.items():
+        for k, v in item.get_data().items():
             _logger.info(f'{k} : {v}')
     '''
     print('....')
