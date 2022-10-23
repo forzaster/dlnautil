@@ -10,17 +10,16 @@
 # - Create html files to browse video files with thumbnail
 # 
 # **Preparation**
+# - Install ffmpeg for extracting thumbnail from video
 # - set environment variables
-#  - nas_mount_dir : mount path of NAS
+#  - nas_mount_dir : mount path of NAS for video files
+#  - nas_mount_thumb_folder : mount path of NAS for thumbnail
 #  - html_thumb_folder : video thumbnail folder in web server
 #  - BASIC_USER : basic authentication user name for php
 #  - BASIC_PASSWD : basic authentication password for php
 # - mount DLNA server as network drive
 
 # # Initial setting
-
-# In[ ]:
-
 
 import pandas as pd
 import datetime
@@ -36,9 +35,6 @@ from IPython.display import clear_output
 warnings.filterwarnings('ignore')
 
 
-# In[ ]:
-
-
 paths = ['../dlnautil']
 paths = [p for p in paths if p not in sys.path]
 sys.path.extend(paths)
@@ -49,7 +45,7 @@ sys.path.extend(paths)
 nas_mount_dir = os.environ['nas_mount_dir']
 nas_ip_address = os.environ['nas_ip_address']
 
-nas_mount_thumb_output_folder = os.environ['nas_mount_thumb_output_folder']
+nas_mount_thumb_output_folder = os.environ['nas_mount_thumb_folder']
 html_thumb_folder = os.environ['html_thumb_folder']
 html_output_folder = './htmls'
 
@@ -80,7 +76,7 @@ def get_files(dir_name: str, exts: List, level: int =0) -> dict:
     return ret
 
 
-files = get_files(nas_mount_dir, ['mp4', 'm2ts'])
+files = get_files(nas_mount_dir, ['mp4', 'm2ts', 'mts'])
 
 # # Create thumbnail
 
@@ -112,7 +108,7 @@ def create_thumb(filename, ext='mp4', ss=1, vframes=1):
 thumbnails = []
 for k, v in files.items():
     for filepath in v:
-        thumb = create_thumb(filepath, ext='m2ts')
+        thumb = create_thumb(filepath, ext=k)
         if thumb:
             thumbnails.append(thumb)
             #print(thumb)
@@ -127,6 +123,9 @@ df_mp4 = pd.DataFrame(files['mp4'], columns=['path'])
 df_mp4['key'] = df_mp4['path'].map(lambda x: '.'.join(x.split('.')[:-1]))
 df_m2ts = pd.DataFrame(files['m2ts'], columns=['path'])
 df_m2ts['key'] = df_m2ts['path'].map(lambda x: '.'.join(x.split('.')[:-1]))
+df_mts = pd.DataFrame(files['mts'], columns=['path'])
+df_mts['key'] = df_mts['path'].map(lambda x: '.'.join(x.split('.')[:-1]))
+df_m2ts = pd.concat([df_m2ts, df_mts])
 
 df_files = pd.merge(df_m2ts, df_mp4, how='outer', on='key', suffixes=['_m2ts', '_mp4'])
 df_files['path'] = df_files['path_m2ts'].where(~df_files['path_m2ts'].isnull(), df_files['path_mp4'])
@@ -182,17 +181,17 @@ contents
 
 
 # "ビデオ" を検索
-item = [c for c in contents if c['title'] == 'ビデオ'][0]
-items = content_browse.browse(url=url, st=stype, item_id=item['id'])
+item = [c for c in contents if c.get_data().get('title') == 'ビデオ'][0]
+items = content_browse.browse(url=url, st=stype, item_id=item.get_data().get('id'))
 items
 
 
 # "全てのビデオ" を検索
-item = [i for i in items if i['title'] == '全てのビデオ'][0]
-item_id = item['id']
+item = [i for i in items if i.get_data().get('title') == '全てのビデオ'][0]
+item_id = item.get_data().get('id')
 
 all_items = content_browse.browse(url=url, st=stype, item_id=item_id)
-df_dlna = pd.DataFrame(all_items)
+df_dlna = pd.DataFrame([i.get_data() for i in all_items])
 df_dlna
 
 
@@ -306,12 +305,13 @@ def create_item(key, x):
         duration = duration.split('.')[0]
 
     thumb = f'{html_thumb_folder}/{album}/{name}.jpg'
-    if ext.endswith('m2ts'):
+    if ext.lower().endswith('m2ts') or ext.lower().endswith('mts'):
         url = f'./videoplay.html?title={grid_title}&duration={duration}&thumb={thumb}&url={url}'
 
     return html_item_template \
             .replace('{grid_title}', grid_title) \
             .replace('{resolution}', resolution) \
+            .replace('{ext}', ext) \
             .replace('{duration}', duration) \
             .replace('{url}', url) \
             .replace('{thumb}', thumb)
@@ -403,7 +403,8 @@ html_text += html_top_template_1
 for k in keys:
     # create year item
     df_tmp = df_all[df_all['year'] == k]
-    item = df_tmp.iloc[random.randint(0, len(df_tmp))]
+    print(f'video of {k} : {len(df_tmp)}')
+    item = df_tmp.iloc[random.randint(0, len(df_tmp)-1)]
     thumb = f'{item.album_dlna}/{item.title_dlna}'    
     html_text += html_top_item_template.replace('{k}', k)\
                                        .replace('{html_thumb_folder}', html_thumb_folder)\
