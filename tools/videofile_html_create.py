@@ -114,8 +114,7 @@ for k, v in files.items():
             #print(thumb)
             #break
 
-len(thumbnails)
-
+print(f'thumb count={len(thumbnails)}')
 
 # # Create file list
 
@@ -242,7 +241,9 @@ html_item_template = """
   <div class="grid_title">{grid_title}</div>
   <div class="grid_subtitle">{resolution}/{ext}</div>
   <div class="grid_subtitle2">{duration}</div>
-  <a href="{url}" target="_blank" rel="noopener noreferrer"><img class="grid_image" src="{thumb}"/></a>
+  <img class="grid_image" src="{thumb}"/>
+  <img class="grid_playicon" src="icons/play.png" style="visibility:hidden"/>
+  <div class="grid_image_overlay" id="{seq_idx}"></div>
 </div>
 """
 
@@ -255,20 +256,145 @@ html_year_template_1 = """
     <link rel="stylesheet" href="css.css">
     <title>{key}</title>
     <script type="text/javascript">
-      function initIcon() {{
+      let _videos = [{videos_array}];
+      let _playIcons = [];
+      let _titles = [];
+      let _curPlayIcon = null;
+      let _curPlayIdx = -1;
+      let _curTimeout = null;
+      let _prevPlayPosition = null;
+
+      function closePlayObject() {{
+        var req = new XMLHttpRequest();
+        req.open("GET", "video_stop.php", false);
+        req.send(null);
+
+        var playArea = document.getElementById("play_area");
+        if (playArea.children.length > 0) {{
+          console.log('remove')
+          playArea.children[0].remove()
+        }}
+      }}
+
+      function clearPlay() {{
+        closePlayObject()
+        if (_curTimeout != null) {{
+            clearTimeout(_curTimeout);
+            _curTimeout = null;
+        }}
+        if (_curPlayIcon != null) {{
+          _curPlayIcon.style.visibility = 'hidden';
+          _curPlayIcon = null;
+        }}
+        document.getElementById('play_status').style.visibility = 'hidden'
+        document.getElementById('play_status').innerHTML = ''
+      }}
+
+      function curPlay() {{
+        clearPlay()
+        if (_curPlayIdx < _playIcons.length) {{
+          _curPlayIcon = _playIcons[_curPlayIdx];
+          _curPlayIcon.style.visibility = 'visible';
+        }}
+
+        // MP4
+        if (_videos[_curPlayIdx].endsWith('mp4') || _videos[_curPlayIdx].endsWith('MP4')) {{
+          console.log('start mp4')
+          var video = document.createElement("video");
+          video.src = _videos[_curPlayIdx];
+          video.setAttribute("controls","");
+          document.getElementById('play_area').appendChild(video);
+          video.addEventListener('ended', function() {
+            console.log('mp4 ended')
+            _curPlayIdx = _curPlayIdx + 1;
+            if (_curPlayIdx >= _videos.length) {{
+              _curPlayIdx = 0;
+            }}
+            curPlay()
+          },false)
+          video.play()
+          video.width = 600
+          video.height = 400
+          return
+        }}
+
+        // M2TS
+        var req = new XMLHttpRequest();
+        req.open("GET", "video_set_play.php?url=" + _videos[_curPlayIdx], false);
+        req.send(null);
+        curTimeout = setTimeout(checkPlay, 5000);
+        document.getElementById('play_status').style.visibility = 'visible'
+      }}
+
+      function checkPlay() {{
+        var req = new XMLHttpRequest();
+        req.open("GET", "video_get_position.php", false);
+        req.send(null);
+        durationTxt = req.responseText.match(/<TrackDuration>.*<\/TrackDuration>/)[0];
+        progressTxt = req.responseText.match(/<RelTime>.*<\/RelTime>/)[0];
+        durationTxt = durationTxt.replace('<TrackDuration>', '');
+        durationTxt = durationTxt.replace('</TrackDuration>', '');
+        progressTxt = progressTxt.replace('<RelTime>', '');
+        progressTxt = progressTxt.replace('</RelTime>', '');
+        play_status = 'Now plaing --- ' + _titles[_curPlayIdx] + ' --- ' + progressTxt + '/' + durationTxt
+        //console.log(play_status);
+        document.getElementById('play_status').innerHTML = play_status
+        if (_prevPlayPosition == null || _prevPlayPosition != progressTxt) {{
+          _curTimeout = setTimeout(checkPlay, 1000);
+        }} else {{
+          _curPlayIdx = _curPlayIdx + 1;
+          if (_curPlayIdx >= _videos.length) {{
+            _curPlayIdx = 0;
+          }}
+          curPlay()
+        }}
+        _prevPlayPosition = progressTxt;
+      }}
+
+      function init() {{
+        var root = document.getRootNode()
+
+        // Stop icon setting
         var stop = document.getElementById("overlay_icon");
         stop.addEventListener('click', function() {{
           console.log("click stop");
-          var req = new XMLHttpRequest();
-          req.open("GET", "video_stop.php", false);
-          req.send(null);
-          console.log(req.responseText);
+          clearPlay()
         }})
+
+        // Grid item
+        var gridItems = root.getElementsByClassName("grid_cell");
+        console.log('grid item size = ' + gridItems.length);
+        // Grid child setting
+        for (var i = 0; i < gridItems.length; i++) {{
+          console.log('--- item ' + i);
+          item = gridItems[i];
+          for (var j = 0; j < item.children.length; j++) {{
+            childItem = item.children[j];
+            if (childItem.className == 'grid_title') {{
+              _titles.push(childItem.innerHTML)
+            }} else if (childItem.className == 'grid_playicon') {{
+              _playIcons.push(childItem)
+            }} else if (childItem.className == 'grid_image_overlay') {{
+              var video_idx = parseInt(childItem.id, 10);
+
+              console.log(childItem.id + ' ' + video_idx)
+              if (video_idx < _videos.length) {{
+                console.log('item ' + video_idx + ' addEventLister for play');
+                childItem.addEventListener('click', {videoIdx: video_idx, handleEvent: function() {{
+                  console.log("start play " + this.videoIdx);
+                  _curPlayIdx = this.videoIdx;
+                  curPlay()
+                }
+                }})
+              }}
+            }}
+          }}
+        }}
       }}
     </script>
 </head>
 
-<body onload="initIcon()">
+<body onload="init()">
 <a href="index.php">Top</a>{prev_year}{next_year}
 """
 
@@ -276,6 +402,8 @@ html_year_template_2 = """
 </div>
 <p>
 <p>
+<div id="play_area"></div>
+<div id="play_status"></div>
 <div id="overlay_icon"><img src="icons/stop.png"/></div>
 <a href="index.php">Top</a>{prev_year}{next_year}
 </body>
@@ -285,10 +413,10 @@ html_year_template_2 = """
 
 import re
 
-def create_item(key, x):
-    url = x['res']
+def create_item(key, x, seq_idx):
+    #url = x['res']
     path = x['path']
-    title = x['title_dlna']
+    #title = x['title_dlna']
     resolution = x['resolution']
     ext = x['ext']
     duration = x['duration']
@@ -305,16 +433,16 @@ def create_item(key, x):
         duration = duration.split('.')[0]
 
     thumb = f'{html_thumb_folder}/{album}/{name}.jpg'
-    if ext.lower().endswith('m2ts') or ext.lower().endswith('mts'):
-        url = f'./videoplay.html?title={grid_title}&duration={duration}&thumb={thumb}&url={url}'
+    #if ext.lower().endswith('m2ts') or ext.lower().endswith('mts'):
+    #    url = f'./videoplay.html?title={grid_title}&duration={duration}&thumb={thumb}&url={url}'
 
     return html_item_template \
             .replace('{grid_title}', grid_title) \
             .replace('{resolution}', resolution) \
             .replace('{ext}', ext) \
             .replace('{duration}', duration) \
-            .replace('{url}', url) \
-            .replace('{thumb}', thumb)
+            .replace('{thumb}', thumb) \
+            .replace('{seq_idx}', str(seq_idx))
 
 
 def create_year_html(key, group, years):
@@ -333,6 +461,8 @@ def create_year_html(key, group, years):
                                      .replace('{prev_year}', prev_year)\
                                      .replace('{next_year}', next_year)
 
+    video_urls = []
+    seq_idx = 0
     for key2, group2 in df.groupby('album_dlna'):
         html_text += f'<div class="title">{key2}</div>\n'
         html_text += '<div class="grid">'
@@ -340,13 +470,18 @@ def create_year_html(key, group, years):
         df2 = group2.sort_values('title_dlna')
         for i in range(len(df2)):
             x = df2.iloc[i, :]
-            html_text += create_item(key, x)
+            html_text += create_item(key, x, seq_idx)
+            url = x['res']
+            video_urls.append(url)
+            seq_idx += 1
         
         html_text += '</div>\n'
 
     html_text += html_year_template_2.replace('{prev_year}', prev_year)\
                                      .replace('{next_year}', next_year)
     
+    html_text = html_text.replace('{videos_array}', ','.join(["'" + url + "'" for url in video_urls]))
+
     phpfile = f'{html_output_folder}/{key}.php'
     with open(phpfile, 'w', encoding='utf-8') as f:
         f.write(html_text)
