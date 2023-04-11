@@ -263,6 +263,7 @@ html_year_template_1 = """
       let _curPlayIdx = -1;
       let _curTimeout = null;
       let _prevPlayPosition = null;
+      let _waitForNextState = false;
 
       function closePlayObject() {{
         var req = new XMLHttpRequest();
@@ -324,31 +325,49 @@ html_year_template_1 = """
         req.send(null);
         curTimeout = setTimeout(checkPlay, 5000);
         document.getElementById('play_status').style.visibility = 'visible'
+        play_status = 'Now buffering ... ' + _titles[_curPlayIdx] + '(' + (_curPlayIdx+1) + '/' + _videos.length + ')'
+      }}
+
+      function removeTag(target, source) {{
+        ret = source.replace('<' + target + '>', '');
+        ret = ret.replace('</' + target + '>', '');
+        return ret
       }}
 
       function checkPlay() {{
         var req = new XMLHttpRequest();
         req.open("GET", "video_get_position.php", false);
         req.send(null);
+        trackUri = req.responseText.match(/<TrackURI>.*<\/TrackURI>/)[0];
+        trackUri = removeTag('TrackURI', trackUri);
         durationTxt = req.responseText.match(/<TrackDuration>.*<\/TrackDuration>/)[0];
+        durationTxt = removeTag('TrackDuration', durationTxt);
+        durationTxt = durationTxt.split('.')[0];
         progressTxt = req.responseText.match(/<RelTime>.*<\/RelTime>/)[0];
-        durationTxt = durationTxt.replace('<TrackDuration>', '');
-        durationTxt = durationTxt.replace('</TrackDuration>', '');
-        progressTxt = progressTxt.replace('<RelTime>', '');
-        progressTxt = progressTxt.replace('</RelTime>', '');
-        play_status = 'Now plaing --- ' + _titles[_curPlayIdx] + ' --- ' + progressTxt + '/' + durationTxt
+        progressTxt = removeTag('RelTime', progressTxt);
+        progressTxt = progressTxt.split('.')[0];
+        relCount = req.responseText.match(/<RelCount>.*<\/RelCount>/)[0];
+        relCount = removeTag('RelCount', relCount);
+        play_status = 'Now plaing ... ' + _titles[_curPlayIdx] + '(' + (_curPlayIdx+1) + '/' + _videos.length + ') : ' + progressTxt + '/' + durationTxt;
         //console.log(play_status);
-        document.getElementById('play_status').innerHTML = play_status
-        if (_prevPlayPosition == null || _prevPlayPosition != progressTxt) {{
+        document.getElementById('play_status').innerHTML = play_status;
+
+        isCurUri = trackUri == _videos[_curPlayIdx];
+        if (isCurUri && (_prevPlayPosition == '0' || _prevPlayPosition != relCount)) {{
           _curTimeout = setTimeout(checkPlay, 1000);
+        }} else if (_waitForNextState == false) {{
+          _waitForNextState = true;
+          _curTimeout = setTimeout(checkPlay, 1500);
         }} else {{
+          _waitForNextState = false;
           _curPlayIdx = _curPlayIdx + 1;
           if (_curPlayIdx >= _videos.length) {{
             _curPlayIdx = 0;
           }}
+          console.log('nextPlay--- ' + _curPlayIdx + ', ' + isCurUri + ', ' + _prevPlayPosition + ', ' + relCount);
           curPlay()
         }}
-        _prevPlayPosition = progressTxt;
+        _prevPlayPosition = relCount;
       }}
 
       function init() {{
